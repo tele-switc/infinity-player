@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Infinity AI - Floating Cinema</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* 基础样式 */
+        body { font-family: 'Space Grotesk', sans-serif; background: #000; color: #fff; overflow: hidden; }
+        .glass { background: rgba(20, 20, 20, 0.7); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); }
+        
+        /* 视图切换逻辑 */
+        .view { 
+            position: absolute; inset: 0; 
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1); 
+            opacity: 0; pointer-events: none; transform: scale(0.98); z-index: 0; 
+        }
+        .view.active { 
+            opacity: 1; pointer-events: auto; transform: scale(1); z-index: 10; 
+        }
+        
+        /* 输入框样式 */
+        .input-dark {
+            width: 100%; background: #0a0a0a; border: 1px solid #333;
+            padding: 12px; border-radius: 8px; color: white; margin-bottom: 12px; font-family: monospace;
+        }
+        .input-dark:focus { outline: none; border-color: #3b82f6; }
+        
+        /* --- 核心：可拖拽悬浮窗动画与样式 --- */
+        #player-container {
+            transition: width 0.4s, height 0.4s, border-radius 0.4s; /* 位置移动通过JS控制，不加transition以免拖拽延迟 */
+            position: relative; z-index: 20;
+            background: #000;
+        }
+
+        /* Mini Mode 激活状态 */
+        body.mini-mode #player-container {
+            position: fixed;
+            /* 默认宽高，位置由JS动态控制 */
+            width: 420px;
+            height: 236px;
+            border-radius: 12px;
+            box-shadow: 0 30px 60px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.1);
+            z-index: 100;
+            overflow: hidden;
+        }
+
+        /* 拖拽把手 (仅在 Mini Mode 显示) */
+        #drag-handle {
+            display: none;
+            position: absolute; top: 0; left: 0; right: 0; height: 30px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+            cursor: grab; z-index: 30;
+            align-items: center; justify-content: center;
+        }
+        #drag-handle:active { cursor: grabbing; }
+        
+        body.mini-mode #drag-handle { display: flex; opacity: 0; transition: opacity 0.2s; }
+        body.mini-mode #player-container:hover #drag-handle { opacity: 1; }
+
+        /* 布局调整 */
+        body.mini-mode #list-sidebar { width: 100%; border-left: none; }
+        body.mini-mode #main-layout { flex-direction: column; }
+        
+        /* 滚动条 */
+        .hide-scroll::-webkit-scrollbar { width: 6px; }
+        .hide-scroll::-webkit-scrollbar-track { background: #0a0a0a; }
+        .hide-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. Config View -->
+    <div id="view-setup" class="view flex items-center justify-center p-6 bg-black/90">
+        <div class="glass w-full max-w-[480px] p-8 rounded-2xl shadow-2xl border-t border-blue-900">
+            <h2 class="text-2xl font-bold mb-6">System Setup</h2>
+            <form id="config-form" onsubmit="saveConfig(event)">
+                <label class="text-xs text-gray-500 uppercase font-bold">Provider</label>
+                <select id="cfg-provider" class="input-dark mb-4" onchange="applyPreset()">
+                    <option value="openai">OpenAI</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="nvidia">NVIDIA NIM</option>
+                    <option value="siliconflow">SiliconFlow</option>
+                </select>
+                <label class="text-xs text-gray-500 uppercase font-bold">API Key</label>
+                <input type="password" id="cfg-key" class="input-dark" placeholder="sk-..." required>
+                <label class="text-xs text-gray-500 uppercase font-bold">Model</label>
+                <input type="text" id="cfg-model" class="input-dark">
+                <div class="mt-2 mb-4">
+                    <label class="text-xs text-gray-500 uppercase font-bold">Proxy (Optional)</label>
+                    <input type="text" id="cfg-proxy" class="input-dark" placeholder="http://127.0.0.1:7890">
+                </div>
+                <div id="error-box" class="hidden text-red-400 text-xs mb-4"></div>
+                <button type="submit" id="save-btn" class="w-full py-3 bg-white text-black font-bold rounded hover:bg-gray-200 transition">CONNECT</button>
+            </form>
+            <button onclick="switchView('view-search')" class="w-full mt-2 text-xs text-gray-500 hover:text-white py-2">CANCEL</button>
+        </div>
+    </div>
+
+    <!-- 2. Search View -->
+    <div id="view-search" class="view flex items-center justify-center p-6 bg-black">
+        <div class="w-full max-w-2xl text-center relative">
+            <button onclick="openSettings()" class="absolute -top-20 right-0 text-gray-600 hover:text-white p-2"><i class="fas fa-cog"></i></button>
+            <h1 class="text-7xl font-bold tracking-tighter mb-4 text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-600">INFINITY</h1>
+            <p class="text-xs font-mono text-gray-500 tracking-[0.6em] mb-16">MASSIVE SCALE ARCHIVE</p>
+            <input type="text" id="query" placeholder="Target Subject..." class="w-full bg-transparent border-b border-gray-800 py-6 text-4xl text-center text-white focus:outline-none focus:border-white transition-all font-light mb-12">
+            <button onclick="run()" class="w-full py-5 bg-white/5 border border-white/10 hover:bg-white hover:text-black text-white font-bold text-xl rounded-2xl transition-all shadow-[0_0_50px_rgba(0,0,0,0.5)]">INITIALIZE MASSIVE SCAN</button>
+        </div>
+    </div>
+
+    <!-- 3. Main System View -->
+    <div id="view-system" class="view flex flex-col h-full bg-[#050505]">
+        <header class="h-14 flex items-center justify-between px-6 border-b border-white/5 bg-black z-30 select-none">
+            <button onclick="switchView('view-search')" class="text-xs font-bold text-gray-500 hover:text-white"><i class="fas fa-arrow-left"></i> SEARCH</button>
+            <div id="status" class="text-xs font-mono text-blue-500 animate-pulse">READY</div>
+        </header>
+
+        <div id="main-layout" class="flex-1 flex overflow-hidden relative">
+            
+            <!-- Draggable Player Container -->
+            <div id="player-container" class="flex-1 bg-black relative flex items-center justify-center border-b border-white/5 md:border-b-0">
+                
+                <!-- Drag Handle (Invisible unless hovered in mini mode) -->
+                <div id="drag-handle">
+                    <div class="w-12 h-1 bg-white/30 rounded-full"></div>
+                </div>
+
+                <video id="player" class="w-full h-full max-h-screen bg-black" controls playsinline></video>
+                
+                <!-- Loading Spinner -->
+                <div id="loader" class="absolute inset-0 flex items-center justify-center bg-black/80 z-10 hidden pointer-events-none">
+                    <div class="flex flex-col items-center gap-2">
+                        <div class="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        <span class="text-[10px] font-mono text-blue-500">BUFFERING</span>
+                    </div>
+                </div>
+
+                <!-- Mini/Maxi Toggle Button -->
+                <button onclick="toggleMiniMode()" class="absolute top-4 right-4 bg-black/40 hover:bg-black/80 backdrop-blur text-white p-2 rounded-lg z-20 border border-white/10 transition group" title="Toggle Floating Mode">
+                    <i id="mini-icon" class="fas fa-compress-alt group-hover:scale-110 transition"></i>
+                </button>
+            </div>
+
+            <!-- List Sidebar -->
+            <div id="list-sidebar" class="w-full md:w-[450px] bg-[#0a0a0a] border-l border-white/5 flex flex-col z-10 transition-all duration-500">
+                <div class="p-4 border-b border-white/5 flex justify-between items-center bg-[#0a0a0a]">
+                    <span class="text-xs font-bold text-gray-500 uppercase">Results</span>
+                    <span id="count" class="text-xs font-mono text-gray-600">0 ITEMS</span>
+                </div>
+                <div id="list" class="flex-1 overflow-y-auto hide-scroll p-2 space-y-2 pb-24 md:pb-2"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 拖拽逻辑 ---
+        const playerContainer = document.getElementById('player-container');
+        const dragHandle = document.getElementById('drag-handle');
+        let isDragging = false;
+        let startX, startY, initialLeft, initialTop;
+
+        dragHandle.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            
+            const rect = playerContainer.getBoundingClientRect();
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            
+            dragHandle.style.cursor = 'grabbing';
+            e.preventDefault(); 
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            
+            playerContainer.style.left = `${initialLeft + dx}px`;
+            playerContainer.style.top = `${initialTop + dy}px`;
+            
+            // 清除自动布局的干扰
+            playerContainer.style.bottom = 'auto';
+            playerContainer.style.right = 'auto';
+        });
+
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            dragHandle.style.cursor = 'grab';
+        });
+
+        // --- Mini Mode Toggle ---
+        function toggleMiniMode() {
+            const body = document.body;
+            const icon = document.getElementById('mini-icon');
+            const container = document.getElementById('player-container');
+            
+            body.classList.toggle('mini-mode');
+            
+            if (body.classList.contains('mini-mode')) {
+                // 进入悬浮模式
+                icon.classList.replace('fa-compress-alt', 'fa-expand-alt');
+                
+                // 默认位置：右下角
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                container.style.left = `${w - 440}px`;
+                container.style.top = `${h - 260}px`;
+                container.style.position = 'fixed'; // 强制 fixed
+                
+            } else {
+                // 恢复普通模式
+                icon.classList.replace('fa-expand-alt', 'fa-compress-alt');
+                
+                container.style.position = '';
+                container.style.left = '';
+                container.style.top = '';
+                container.style.width = '';
+                container.style.height = '';
+            }
+        }
+
+        // --- Config & API Logic ---
+        const PRESETS = {
+            openai: { base: "https://api.openai.com/v1", model: "gpt-4o" },
+            deepseek: { base: "https://api.deepseek.com", model: "deepseek-chat" },
+            nvidia: { base: "https://integrate.api.nvidia.com/v1", model: "meta/llama-3.1-70b-instruct" },
+            siliconflow: { base: "https://api.siliconflow.cn/v1", model: "Qwen/Qwen2.5-7B-Instruct" }
+        };
+
+        window.onload = async () => {
+            try {
+                const res = await fetch('/api/config');
+                const cfg = await res.json();
+                document.getElementById('cfg-provider').value = cfg.provider;
+                document.getElementById('cfg-model').value = cfg.model;
+                document.getElementById('cfg-proxy').value = cfg.proxy;
+                
+                // 修复点：添加 else 逻辑，确保已配置时跳转搜索页
+                if(cfg.is_configured) {
+                    switchView('view-search');
+                } else { 
+                    applyPreset(); 
+                    switchView('view-setup'); 
+                }
+            } catch(e) { console.error(e); }
+        };
+
+        function applyPreset() {
+            const p = document.getElementById('cfg-provider').value;
+            if(PRESETS[p]) document.getElementById('cfg-model').value = PRESETS[p].model;
+        }
+
+        function switchView(id) {
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+        function openSettings() { switchView('view-setup'); }
+
+        async function saveConfig(e) {
+            e.preventDefault();
+            const btn = document.getElementById('save-btn');
+            btn.innerText = "VERIFYING..."; btn.disabled = true;
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        provider: document.getElementById('cfg-provider').value,
+                        api_key: document.getElementById('cfg-key').value,
+                        model: document.getElementById('cfg-model').value,
+                        base_url: PRESETS[document.getElementById('cfg-provider').value]?.base,
+                        proxy: document.getElementById('cfg-proxy').value
+                    })
+                });
+                if(res.ok) switchView('view-search');
+                else { 
+                    const d = await res.json(); 
+                    document.getElementById('error-box').innerText = d.detail; 
+                    document.getElementById('error-box').classList.remove('hidden'); 
+                }
+            } catch(err) { alert("Network Error"); }
+            btn.innerText = "CONNECT"; btn.disabled = false;
+        }
+
+        let ws = null;
+        function run() {
+            const q = document.getElementById('query').value;
+            if(!q) return;
+            switchView('view-system');
+            const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${protocol}://${window.location.host}/ws`);
+            ws.onopen = () => ws.send(JSON.stringify({ query: q }));
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                if(d.status === 'log') document.getElementById('status').innerText = d.msg;
+                if(d.status === 'done') { renderList(d.data); document.getElementById('status').innerText = d.msg; }
+                if(d.status === 'error') { alert(d.msg); openSettings(); }
+            };
+        }
+
+        function renderList(data) {
+            const list = document.getElementById('list');
+            list.innerHTML = '';
+            document.getElementById('count').innerText = data.length + " ITEMS";
+            data.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = "flex gap-3 p-3 rounded-xl hover:bg-white/10 cursor-pointer transition border border-transparent group";
+                div.onclick = () => play(item.id);
+                
+                const min = Math.floor(item.duration / 60);
+                div.innerHTML = `
+                    <div class="w-24 h-16 bg-black rounded-lg overflow-hidden flex-shrink-0 border border-white/5 relative">
+                        <img src="${item.thumbnail}" class="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition">
+                        <div class="absolute bottom-1 right-1 bg-black/90 px-1 rounded text-[9px] font-mono">${min}m</div>
+                    </div>
+                    <div class="flex-1 min-w-0 flex flex-col justify-center">
+                        <div class="text-xs font-bold text-gray-300 truncate group-hover:text-white transition">${item.title}</div>
+                        <div class="text-[10px] text-gray-600 truncate mb-1">${item.channel}</div>
+                        <div class="text-[9px] text-blue-400 opacity-60 truncate">${item.ai_reason}</div>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+            if(data.length) play(data[0].id);
+        }
+
+        function play(id) {
+            const p = document.getElementById('player');
+            const l = document.getElementById('loader');
+            l.classList.remove('hidden');
+            p.src = `/api/stream/${id}`;
+            p.play().then(() => l.classList.add('hidden')).catch(() => l.classList.add('hidden'));
+        }
+    </script>
+</body>
+</html>
