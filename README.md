@@ -15,7 +15,7 @@
 
 ### 🧠 AI-Powered "Truth Shield"
 
-* The core engine can use **NVIDIA NIM (Llama-3)**, **OpenAI**, or **DeepSeek** to semantically analyze video metadata.
+* The core engine can use **NVIDIA NIM (open-source models)**, **OpenAI**, or **DeepSeek** to semantically analyze video metadata.
 * **Sentiment Analysis:** Instantly rejects "Reaction", "Gossip", and "Clickbait" content.
 * **Source Verification:** Prioritizes official channels (e.g., Stanford, TED, YC) and primary speakers.
 * **AI Insight:** Generates real-time viewing guides (Context, Key Topics, Target Audience) before you watch.
@@ -116,7 +116,7 @@ infinity-player features a built-in Graphical Setup Wizard — manual editing of
 2. Setup Screen: if no API key is found, you'll be redirected to the setup page.
 3. Select Provider:
 
-   * **NVIDIA NIM (recommended):** use `meta/llama-3.1-70b-instruct` for best reasoning (if available).
+   * **NVIDIA NIM (recommended):** use open-source models without powerful hardware.
    * **OpenAI / DeepSeek / SiliconFlow:** fully supported via a preset dropdown.
 4. Proxy Settings (important):
 
