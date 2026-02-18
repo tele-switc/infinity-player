@@ -1,16 +1,6 @@
 # infinity-player
 # ♾️ infinity-player - The Ultimate Primary Source Aggregator
 
-<div align="center">
-![Version](https://img.shields.io/badge/Version-7.0-blue.svg?style=flat-square)
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?style=flat-square&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg?style=flat-square&logo=fastapi&logoColor=white)
-![NVIDIA NIM](https://img.shields.io/badge/AI-NVIDIA%20NIM-76b900.svg?style=flat-square&logo=nvidia&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-purple.svg?style=flat-square)
-</div>
-
-**"Stop watching the noise. Start listening to the source."**
-
 [Features](#-features) • [Installation](#-installation) • [Configuration](#-configuration) • [Usage](#-usage) • [Contributing](#-contributing) • [License](#-license)
 
 ---
